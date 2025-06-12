@@ -1,0 +1,276 @@
+
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <title>Block-GTA MegaCity</title>
+  <style>
+    body { margin: 0; overflow: hidden; font-family: sans-serif; }
+    canvas { display: block; }
+    #info, #dialog, #touchControls {
+      position: absolute;
+      z-index: 10;
+      color: white;
+      font-family: sans-serif;
+    }
+    #info {
+      top: 10px;
+      left: 10px;
+      background: rgba(0,0,0,0.5);
+      padding: 10px;
+    }
+    #dialog {
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.7);
+      padding: 10px 20px;
+      display: none;
+    }
+    #loadingScreen {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: #000;
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      z-index: 1000;
+    }
+    #loadingBar {
+      width: 80%;
+      height: 20px;
+      background: #333;
+      margin-top: 20px;
+    }
+    #loadingProgress {
+      height: 100%;
+      width: 0%;
+      background: limegreen;
+    }
+    #touchControls {
+      bottom: 20px;
+      right: 20px;
+      display: none;
+    }
+    .btn {
+      width: 50px;
+      height: 50px;
+      margin: 5px;
+      background: rgba(255,255,255,0.2);
+      border: 1px solid white;
+      color: white;
+      font-size: 20px;
+      text-align: center;
+      line-height: 50px;
+      user-select: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="loadingScreen">
+    Spiel wird geladen...
+    <div id="loadingBar"><div id="loadingProgress"></div></div>
+  </div>
+  <div id="info">WASD = Bewegen, Maus = Umschauen, E = Einsteigen, 1/2 = Waffen, Klick = Schießen</div>
+  <div id="dialog"></div>
+  <div id="touchControls">
+    <div style="display:flex;">
+      <div class="btn" ontouchstart="keys['ArrowLeft']=true" ontouchend="keys['ArrowLeft']=false">◀</div>
+      <div class="btn" ontouchstart="keys['ArrowUp']=true" ontouchend="keys['ArrowUp']=false">▲</div>
+      <div class="btn" ontouchstart="keys['ArrowRight']=true" ontouchend="keys['ArrowRight']=false">▶</div>
+    </div>
+    <div style="display:flex;">
+      <div class="btn" ontouchstart="keys['ArrowDown']=true" ontouchend="keys['ArrowDown']=false">▼</div>
+      <div class="btn" ontouchstart="keys['KeyE']=true" ontouchend="keys['KeyE']=false">E</div>
+    </div>
+  </div>
+  <script type="module">
+    import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
+    import { PointerLockControls } from 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/PointerLockControls.js';
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x87ceeb);
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    const light = new THREE.DirectionalLight(0xffffff, 1);
+    light.position.set(10, 20, 10);
+    scene.add(light);
+
+    const blockSize = 2;
+    const ground = new THREE.Group();
+    const worldSize = 100;
+    let loaded = 0;
+    const total = worldSize * worldSize;
+
+    for (let x = -worldSize/2; x <= worldSize/2; x++) {
+      for (let z = -worldSize/2; z <= worldSize/2; z++) {
+        const block = new THREE.Mesh(
+          new THREE.BoxGeometry(blockSize, blockSize, blockSize),
+          new THREE.MeshLambertMaterial({ color: 0x228B22 })
+        );
+        block.position.set(x * blockSize, -blockSize / 2, z * blockSize);
+        ground.add(block);
+        loaded++;
+        if (loaded % 100 === 0) {
+          document.getElementById('loadingProgress').style.width = (loaded / total * 100) + '%';
+        }
+      }
+    }
+    scene.add(ground);
+    document.getElementById('loadingProgress').style.width = '100%';
+    document.getElementById('loadingScreen').style.display = 'none';
+
+    const player = new THREE.Object3D();
+    player.position.set(0, 2, 0);
+    scene.add(player);
+    camera.position.set(0, 1.6, 0);
+    player.add(camera);
+
+    const controls = new PointerLockControls(camera, document.body);
+    document.body.addEventListener('click', () => controls.lock());
+    const keys = {};
+    document.addEventListener('keydown', e => keys[e.code] = true);
+    document.addEventListener('keyup', e => keys[e.code] = false);
+
+    if (/Mobi|Android/i.test(navigator.userAgent)) {
+      document.getElementById('touchControls').style.display = 'block';
+    }
+
+    const car = new THREE.Mesh(
+      new THREE.BoxGeometry(4, 2, 6),
+      new THREE.MeshLambertMaterial({ color: 0xff0000 })
+    );
+    car.position.set(10, 1, 0);
+    scene.add(car);
+
+    const car2 = new THREE.Mesh(
+      new THREE.BoxGeometry(4, 2, 6),
+      new THREE.MeshLambertMaterial({ color: 0x0000ff })
+    );
+    car2.position.set(-10, 1, -10);
+    scene.add(car2);
+
+    let inCar = false;
+    const missionTarget = new THREE.Mesh(
+      new THREE.BoxGeometry(2, 2, 2),
+      new THREE.MeshLambertMaterial({ color: 0xffff00 })
+    );
+    missionTarget.position.set(50, 1, 50);
+    scene.add(missionTarget);
+
+    const npcs = [];
+    for (let i = 0; i < 30; i++) {
+      const npc = new THREE.Mesh(
+        new THREE.BoxGeometry(1.5, 2, 1.5),
+        new THREE.MeshLambertMaterial({ color: 0x00ffff })
+      );
+      npc.position.set(
+        Math.random() * 100 - 50,
+        1,
+        Math.random() * 100 - 50
+      );
+      scene.add(npc);
+      npcs.push(npc);
+    }
+
+    const bullets = [];
+    let currentWeapon = 'pistol';
+    const ammo = { pistol: 20, rocket: 5 };
+    document.addEventListener('keydown', e => {
+      if (e.code === 'Digit1') currentWeapon = 'pistol';
+      if (e.code === 'Digit2') currentWeapon = 'rocket';
+    });
+
+    document.addEventListener('mousedown', () => {
+      if (ammo[currentWeapon] <= 0) return;
+      let geometry = currentWeapon === 'pistol' ? new THREE.SphereGeometry(0.2, 8, 8) : new THREE.BoxGeometry(0.5, 0.5, 0.5);
+      let color = currentWeapon === 'pistol' ? 0xffffff : 0xffa500;
+      const bullet = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ color }));
+      bullet.position.copy(camera.getWorldPosition(new THREE.Vector3()));
+      const dir = new THREE.Vector3();
+      camera.getWorldDirection(dir);
+      bullets.push({ mesh: bullet, dir });
+      scene.add(bullet);
+      ammo[currentWeapon]--;
+    });
+
+    const dialog = document.getElementById('dialog');
+    function showDialog(text, duration = 3000) {
+      dialog.innerText = text;
+      dialog.style.display = 'block';
+      setTimeout(() => dialog.style.display = 'none', duration);
+    }
+
+    let missionStarted = false;
+    function checkMissionStart() {
+      if (!missionStarted && player.position.distanceTo(missionTarget.position) < 5) {
+        missionStarted = true;
+        showDialog("Mission gestartet: Bring das Auto zur Garage!");
+        missionTarget.material.color.set(0x00ff00);
+      }
+    }
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const speed = inCar ? 0.3 : 0.1;
+      if (!inCar) {
+        if (keys['KeyW'] || keys['ArrowUp']) player.translateZ(-speed);
+        if (keys['KeyS'] || keys['ArrowDown']) player.translateZ(speed);
+        if (keys['KeyA'] || keys['ArrowLeft']) player.translateX(-speed);
+        if (keys['KeyD'] || keys['ArrowRight']) player.translateX(speed);
+      }
+
+      if (keys['KeyE']) {
+        const dist = player.position.distanceTo(car.position);
+        if (dist < 5) {
+          inCar = !inCar;
+          if (inCar) {
+            car.add(camera);
+            camera.position.set(0, 1, 0);
+          } else {
+            player.add(camera);
+            camera.position.set(0, 1.6, 0);
+          }
+        }
+        keys['KeyE'] = false;
+      }
+
+      if (inCar) {
+        if (keys['KeyW'] || keys['ArrowUp']) car.translateZ(-0.3);
+        if (keys['KeyS'] || keys['ArrowDown']) car.translateZ(0.3);
+        if (keys['KeyA'] || keys['ArrowLeft']) car.rotation.y += 0.03;
+        if (keys['KeyD'] || keys['ArrowRight']) car.rotation.y -= 0.03;
+      }
+
+      npcs.forEach(npc => {
+        npc.position.x += (Math.random() - 0.5) * 0.1;
+        npc.position.z += (Math.random() - 0.5) * 0.1;
+      });
+
+      bullets.forEach((b, i) => {
+        b.mesh.position.add(b.dir.clone().multiplyScalar(0.5));
+        npcs.forEach((npc, j) => {
+          if (b.mesh.position.distanceTo(npc.position) < 1) {
+            scene.remove(npc);
+            scene.remove(b.mesh);
+            npcs.splice(j, 1);
+            bullets.splice(i, 1);
+          }
+        });
+      });
+
+      checkMissionStart();
+      renderer.render(scene, camera);
+    }
+
+    animate();
+  </script>
+</body>
+</html>
